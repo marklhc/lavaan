@@ -16,13 +16,7 @@ lav_with_local_seed <- function(expr, seed = 1234L) {
   force(expr)
 }
 
-# build the cin.* representation for pure box bounds (finite lower/upper
-# bounds on free parameters only, no explicit (in)equality constraints)
-# directly, with the exact constant jacobian; the legacy route
-# (lav_pt_con_ciq() + numerical Jacobians) generates a per-constraint R
-# function and recovers the same (constant) Jacobian numerically, at a
-# cost of 5 x npar evaluations of a n_bounds-line function at model
-# construction
+# Build the constraint function and exact Jacobian for box bounds.
 lav_con_box_bounds <- function(partable = NULL, theta = NULL,
                                npar = NULL) {
   upper_idx <- integer(0L)
@@ -33,9 +27,7 @@ lav_con_box_bounds <- function(partable = NULL, theta = NULL,
   if (!is.null(partable$lower)) {
     lower_idx <- which(partable$free > 0L & is.finite(partable$lower))
   }
-  # column positions: the same renumbering the generated cin function
-  # uses (position among the free rows; equals the 'unco' column for
-  # ceq.simple models, where several rows share a 'free' id)
+  # Bound functions index free rows, even when simple equalities share ids.
   pos <- integer(length(partable$free))
   pos[partable$free > 0L] <- seq_along(partable$free[partable$free > 0L])
   upper_pos <- pos[upper_idx]
@@ -46,19 +38,14 @@ lav_con_box_bounds <- function(partable = NULL, theta = NULL,
   n_lo <- length(lower_idx)
   n_bound <- n_up + n_lo
 
-  # row semantics: one row per finite bound, in the same order the legacy
-  # generator uses (all upper rows, then all lower rows). A partable row
-  # that has BOTH a finite lower and a finite upper bound contributes one
-  # upper row ('upper - x') and one lower row ('x - lower'). (The legacy
-  # generator used to emit such a row twice as an upper row; that is
-  # corrected in lav_pt_con_ciq() as well, so the two paths agree.)
-  cin_function <- function(x, ...) {
+  # Match the generated function: upper rows precede lower rows.
+  cin_function <- function(.x., ...) {
     out <- numeric(n_bound)
     if (n_up > 0L) {
-      out[seq_len(n_up)] <- upper_val - x[upper_pos]
+      out[seq_len(n_up)] <- upper_val - .x.[upper_pos]
     }
     if (n_lo > 0L) {
-      out[n_up + seq_len(n_lo)] <- x[lower_pos] - lower_val
+      out[n_up + seq_len(n_lo)] <- .x.[lower_pos] - lower_val
     }
     out[is.na(out)] <- Inf
     if (n_bound > 0L) {
@@ -67,14 +54,11 @@ lav_con_box_bounds <- function(partable = NULL, theta = NULL,
     }
     out
   }
-  # marker so downstream code can recognize the exact constant jacobian
-  # (see lav_inspect_con_info())
   attr(cin_function, "box.bounds") <- list(
     upper.pos = upper_pos, upper.val = upper_val,
     lower.pos = lower_pos, lower.val = lower_val
   )
 
-  # exact (constant) jacobian
   cin_jac <- matrix(0, nrow = n_bound, ncol = npar)
   if (n_up > 0L) {
     cin_jac[cbind(seq_len(n_up), upper_pos)] <- -1
@@ -199,13 +183,6 @@ lav_con_parse <- function(partable = NULL, constraints = NULL,
   )
 
   # inequalities
-  #
-  # box-bounds fast path: when the only inequality constraints are the
-  # finite per-parameter lower/upper bounds (eg the bounds = "standard",
-  # "wide" or "pos.var" profiles), every constraint is linear and each
-  # Jacobian row contains a single +1 or -1, so the representation can
-  # be built directly instead of generating a per-constraint function
-  # and differentiating it numerically (see lav_con_box_bounds())
   cin_box <- NULL
   box_fast_use <- cin_simple && (is.null(box_fast) || isTRUE(box_fast))
   if (box_fast_use) {
@@ -254,7 +231,6 @@ lav_con_parse <- function(partable = NULL, constraints = NULL,
   }
 
   if (box_fast_use) {
-    # exact values, built by lav_con_box_bounds()
     cin_jac <- cin_box$cin.JAC
     cin_rhs <- cin_box$cin.rhs
     cin_theta <- cin_box$cin.theta

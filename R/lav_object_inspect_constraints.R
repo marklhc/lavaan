@@ -107,8 +107,6 @@ lav_inspect_con_info <- function(object) {
   if (!is.null(body(cin_fun))) {
     cin_slack <- as.numeric(cin_fun(x_cin))
     if (!is.null(attr(cin_fun, "box.bounds", exact = TRUE))) {
-      # box bounds only: the jacobian is the exact constant stored at
-      # model construction (one +/-1 per row), valid at every point
       cin_jac <- lavmodel@cin.JAC
     } else {
       cin_jac <- try(lav_func_jacobian_complex(func = cin_fun, x = x_cin),

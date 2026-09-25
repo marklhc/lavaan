@@ -517,11 +517,7 @@ lav_pt_con_ciq <- function(partable, con = NULL, debug = FALSE, # nolint start
   body_txt <- paste(body_txt, "\n# inequality constraints\n", sep = "")
   free <- partable$free
   free[free > 0] <- seq_along(free[free > 0])
-  # ineq_idx is built as c(upper bounds, lower bounds, explicit rows), so
-  # its first length(upper_idx) entries are upper bounds and the next
-  # length(lower_idx) are lower bounds; a parameter with BOTH a finite
-  # lower and a finite upper bound therefore gets one row of each (its
-  # lower row is 'x - lower', not a second 'upper - x')
+  # Use row position: a two-sided bound appears in both index vectors.
   n_upper_rows <- length(upper_idx)
   for (i in seq_along(ineq_idx)) {
     lhs <- partable$lhs[ineq_idx[i]]
