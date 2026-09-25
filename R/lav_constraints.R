@@ -46,29 +46,19 @@ lav_con_box_bounds <- function(partable = NULL, theta = NULL,
   n_lo <- length(lower_idx)
   n_bound <- n_up + n_lo
 
-  # row semantics: the legacy generator's branch test checks
-  # `ineq_idx[i] %in% upper_idx` before the lower bound, so a partable
-  # row that has BOTH a finite lower and a finite upper bound is
-  # emitted twice as an upper row ('upper - x'); only lower-bound-only
-  # rows are emitted as 'x - lower'. Replicate that exactly (it
-  # determines the post-hoc lambda/inactive-row bookkeeping and the
-  # resulting boundary-point standard errors, which must stay
-  # identical to the legacy behavior)
-  lo_dup_idx <- which(lower_idx %in% upper_idx)
-  lo_own_idx <- which(!lower_idx %in% upper_idx)
-  lo_dup_val <- partable$upper[lower_idx[lo_dup_idx]]
-
+  # row semantics: one row per finite bound, in the same order the legacy
+  # generator uses (all upper rows, then all lower rows). A partable row
+  # that has BOTH a finite lower and a finite upper bound contributes one
+  # upper row ('upper - x') and one lower row ('x - lower'). (The legacy
+  # generator used to emit such a row twice as an upper row; that is
+  # corrected in lav_pt_con_ciq() as well, so the two paths agree.)
   cin_function <- function(x, ...) {
     out <- numeric(n_bound)
     if (n_up > 0L) {
       out[seq_len(n_up)] <- upper_val - x[upper_pos]
     }
-    if (length(lo_dup_idx) > 0L) {
-      out[n_up + lo_dup_idx] <- lo_dup_val - x[lower_pos[lo_dup_idx]]
-    }
-    if (length(lo_own_idx) > 0L) {
-      out[n_up + lo_own_idx] <-
-        x[lower_pos[lo_own_idx]] - lower_val[lo_own_idx]
+    if (n_lo > 0L) {
+      out[n_up + seq_len(n_lo)] <- x[lower_pos] - lower_val
     }
     out[is.na(out)] <- Inf
     if (n_bound > 0L) {
@@ -81,8 +71,7 @@ lav_con_box_bounds <- function(partable = NULL, theta = NULL,
   # (see lav_inspect_con_info())
   attr(cin_function, "box.bounds") <- list(
     upper.pos = upper_pos, upper.val = upper_val,
-    lower.pos = lower_pos, lower.val = lower_val,
-    lo.dup = lo_dup_idx
+    lower.pos = lower_pos, lower.val = lower_val
   )
 
   # exact (constant) jacobian
@@ -90,11 +79,8 @@ lav_con_box_bounds <- function(partable = NULL, theta = NULL,
   if (n_up > 0L) {
     cin_jac[cbind(seq_len(n_up), upper_pos)] <- -1
   }
-  if (length(lo_dup_idx) > 0L) {
-    cin_jac[cbind(n_up + lo_dup_idx, lower_pos[lo_dup_idx])] <- -1
-  }
-  if (length(lo_own_idx) > 0L) {
-    cin_jac[cbind(n_up + lo_own_idx, lower_pos[lo_own_idx])] <- 1
+  if (n_lo > 0L) {
+    cin_jac[cbind(n_up + seq_len(n_lo), lower_pos)] <- 1
   }
 
   list(
