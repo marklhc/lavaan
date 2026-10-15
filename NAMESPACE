@@ -92,9 +92,10 @@ export("lavaan", "cfa", "sem", "growth",
        "lavPredictY_cv",
        "lavResidualsY",
        "lavCor",
-       "lavH1",
+        "lavH1",
+        "lavMLstart",
 
-       # API functions
+        # API functions
 
        # lav_matrix
        "lav_matrix_vec",
